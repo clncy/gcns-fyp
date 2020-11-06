@@ -6,4 +6,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile-CPU
-    entrypoint: python3 -m gcns-fyp
+    entrypoint: bash
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: bind
+        source: ./gcns-fyp
+        target: /app/gcns-fyp
+

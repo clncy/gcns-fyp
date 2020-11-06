@@ -1,0 +1,8 @@
+# IDE metadata/python binaries
+gcns-fyp/__pycache__/*
+gcns-fyp/.vscode/*
+.idea/*
+
+# Datasets
+gcns-fyp/data/*
+

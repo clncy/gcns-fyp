@@ -61,5 +61,8 @@ RUN pip install torch-scatter==latest+cpu -f https://pytorch-geometric.com/whl/t
 RUN conda install -y -c conda-forge rdkit && conda clean -ya
 
 COPY gcns-fyp /app/gcns-fyp
+WORKDIR /app/gcns-fyp
 
-CMD ["python3", "-m", "gcns-fyp"]
+RUN pip install -r requirements.txt
+
+CMD ["python3", "main.py"]
