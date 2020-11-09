@@ -6,3 +6,6 @@ gcns-fyp/.vscode/*
 # Datasets
 gcns-fyp/data/*
 
+# Logging
+gcns-fyp/lightning_logs/*
+
