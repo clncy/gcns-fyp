@@ -1,6 +1,6 @@
 # Adapted from https://github.com/rusty1s/pytorch_geometric/blob/master/docker/Dockerfile
 
-FROM ubuntu:18.04
+FROM nvidia/cuda:11.2.2-base-ubuntu20.04
 
 RUN apt-get update && apt-get install -y apt-transport-https ca-certificates && \
     rm -rf /var/lib/apt/lists/*
@@ -46,27 +46,28 @@ ENV CONDA_DEFAULT_ENV=py38
 ENV CONDA_PREFIX=/home/user/miniconda/envs/$CONDA_DEFAULT_ENV
 ENV PATH=$CONDA_PREFIX/bin:$PATH
 
-# Install pytorch
-ENV TORCH 1.7.0
-RUN pip install torch==${TORCH}+cpu -f https://download.pytorch.org/whl/torch_stable.html
+# Install pytorch 1.8.0 with CUDA 11 support
+ENV TORCH 1.8.0
+ENV CUDA cu111
+RUN pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html
 
 # Install PyTorch Geometric.
-RUN pip install torch-scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch-${TORCH}.html \
- && pip install torch-sparse==latest+cpu -f https://pytorch-geometric.com/whl/torch-${TORCH}.html \
- && pip install torch-cluster==latest+cpu -f https://pytorch-geometric.com/whl/torch-${TORCH}.html \
- && pip install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-${TORCH}.html
- 
- # Temporary fix to incorporate changes that fix links to datasets, hardcoded versions once released
- #&& pip install torch-geometric==1.6.1
- RUN pip install git+https://github.com/rusty1s/pytorch_geometric.git
-
+RUN pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+RUN pip install torch-sparse -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+RUN pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+RUN pip install torch-spline-conv -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+RUN pip install torch-geometric
 
 # Install rdkit for usage by MoleculeNet
-RUN conda install -y -c conda-forge rdkit && conda clean -ya
+#RUN conda install -y -c conda-forge rdkit
+#RUN sudo apt-get update
+#RUN DEBIAN_FRONTEND=noninteractive sudo apt install -y --no-install-recommends  python3-rdkit
+#RUN conda create -c rdkit -n my-rdkit-env rdkit
+#RUN conda activate my-rdkit-env
 
 COPY gcns-fyp /app/gcns-fyp
 WORKDIR /app/gcns-fyp
 
-RUN pip install -r requirements.txt
+#RUN pip install -r requirements.txt
 
 CMD ["python3", "main.py"]

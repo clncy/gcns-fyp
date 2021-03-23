@@ -5,7 +5,7 @@ services:
     image: torch-cpu
     build:
       context: .
-      dockerfile: Dockerfile-CPU
+      dockerfile: Dockerfile
     entrypoint: bash
     stdin_open: true
     tty: true

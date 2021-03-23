@@ -1,3 +1,4 @@
+from logging import Logger
 import torch
 from ax import optimize
 from torch.nn import MSELoss
@@ -6,6 +7,17 @@ from torch_geometric.datasets import MoleculeNet
 
 from models import GCN
 from optimise import trial_factory
+
+logger = Logger("main")
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+if torch.cuda.is_available():
+    logger.info("CUDA is available")
+else:
+    logger.info("No CUDA available")
+
+logger.info(device)
 
 TRAINING_RATIO = 0.8 # The ratio of the dataset to be utilised for training/validation
 

@@ -74,4 +74,5 @@ def trial_factory(model_cls: Type[ModelBase], train_dataset: Dataset, k_folds: i
         pp.pprint(params)
 
         return {"validation_loss": (mean_loss, sem_loss)}
+
     return trial
