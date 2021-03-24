@@ -12,7 +12,7 @@ from models import ModelBase
 
 pp = PrettyPrinter()
 
-def trial_factory(model_cls: Type[ModelBase], device: Any, train_dataset: Dataset, k_folds: int, max_epochs: int):
+def trial_factory(model_cls: Type[ModelBase], train_dataset: Dataset, k_folds: int, max_epochs: int, use_gpus=False):
     """ Creates a closure around the trial fucntion to give access to additional parameters
 
     Given that the trial function can only accept a single `params` argument, this
@@ -36,7 +36,9 @@ def trial_factory(model_cls: Type[ModelBase], device: Any, train_dataset: Datase
 
         trainer = pl.Trainer(
             callbacks=[EarlyStopping(monitor="val_loss")],
-            max_epochs=max_epochs
+            max_epochs=max_epochs,
+            gpus=1 if use_gpus else None
+
         )
         validation_losses = []
         kf = KFold(n_splits=k_folds)
@@ -57,7 +59,7 @@ def trial_factory(model_cls: Type[ModelBase], device: Any, train_dataset: Datase
                 output_size=params["output_size"],
                 embedding_dimension=params["embedding_dimension"],
                 hyper_params=params,
-            ).to(device)
+            )
 
             # Fit the model to the given folds of the training data
             trainer.fit(model, train_loader, val_loader)

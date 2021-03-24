@@ -28,9 +28,6 @@ train_split = round(TRAINING_RATIO * len(dataset))
 test_split = len(dataset) - train_split
 train_dataset, test_dataset = random_split(dataset, lengths=[train_split, test_split])
 
-# Move to GPU if available
-train_dataset = train_dataset.to(device)
-test_dataset = test_dataset.to(device)
 
 # Construct the trial function that will evaluate a set of hyperparameters
 trial = trial_factory(
