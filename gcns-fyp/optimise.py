@@ -1,4 +1,4 @@
-from typing import Type
+from typing import Type, Any
 
 from scipy import stats
 from torch.utils.data import Subset
@@ -12,7 +12,7 @@ from models import ModelBase
 
 pp = PrettyPrinter()
 
-def trial_factory(model_cls: Type[ModelBase], train_dataset: Dataset, k_folds: int, max_epochs: int):
+def trial_factory(model_cls: Type[ModelBase], device: Any, train_dataset: Dataset, k_folds: int, max_epochs: int):
     """ Creates a closure around the trial fucntion to give access to additional parameters
 
     Given that the trial function can only accept a single `params` argument, this
@@ -57,7 +57,7 @@ def trial_factory(model_cls: Type[ModelBase], train_dataset: Dataset, k_folds: i
                 output_size=params["output_size"],
                 embedding_dimension=params["embedding_dimension"],
                 hyper_params=params,
-            )
+            ).to(device)
 
             # Fit the model to the given folds of the training data
             trainer.fit(model, train_loader, val_loader)
