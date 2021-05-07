@@ -7,8 +7,8 @@ sudo apt -y upgrade
 
 # Create conda environment
 conda update -y conda
-conda create -y --name gcn-training python=3.8
-conda activate gcn-training
+conda create -y --name autograph python=3.8
+conda activate autograph
 
 # Install pytorch
 python -m pip install torch==${TORCH_VERSION}+${CUDA_VERSION} torchvision==0.9.0+${CUDA_VERSION} torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html

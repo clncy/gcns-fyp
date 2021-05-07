@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+source /home/clncy/anaconda3/etc/profile.d/conda.sh
+conda activate autograph_env
+python "$@"
