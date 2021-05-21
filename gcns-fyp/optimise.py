@@ -6,8 +6,21 @@ from torch.utils.data import Subset
 from torch_geometric.data import DataLoader
 from sklearn.model_selection import KFold
 from pprint import PrettyPrinter
+from torch_geometric.datasets import MoleculeNet
+from torch.nn import MSELoss
+from torch.utils.data import random_split
+from ax import optimize, Models
+from ax.modelbridge.generation_strategy import GenerationStrategy, GenerationStep
+
+# Set logging formatting. Must be done before model import
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+)
+
 pp = PrettyPrinter()
 
+logger = logging.getLogger("optimise")
 
 class EarlyStopping:
     def __init__(self, patience=5, eps=1e-4):
@@ -32,7 +45,21 @@ class EarlyStopping:
 
 
 class TrialRunner:
-    def __init__(self, model_cls, train_dataset, test_dataset, k_folds, max_epochs, criterion, optimiser_cls, device):
+    def __init__(
+        self,
+        experiment_db,
+        experiment_id,
+        model_cls,
+        train_dataset,
+        test_dataset,
+        k_folds,
+        max_epochs,
+        criterion,
+        optimiser_cls,
+        device,
+    ):
+        self.experiment_db = experiment_db
+        self.experiment_id = experiment_id
         self.model_cls = model_cls
         self.k_folds = k_folds
         self.max_epochs = max_epochs
@@ -49,7 +76,7 @@ class TrialRunner:
         model.train()
         es = EarlyStopping()
 
-        for epoch in range(1, self.max_epochs+1):
+        for epoch in range(1, self.max_epochs + 1):
             epoch_losses = []
             for data in train_loader:
                 data = data.to(self.device)
@@ -60,7 +87,7 @@ class TrialRunner:
                 optimiser.step()
                 optimiser.zero_grad()
 
-            mean_epoch_loss = sum(epoch_losses)/len(epoch_losses)
+            mean_epoch_loss = sum(epoch_losses) / len(epoch_losses)
             # print(f"Epoch {epoch} completed with average loss {mean_epoch_loss}")
 
             es.step(mean_epoch_loss)
@@ -88,30 +115,54 @@ class TrialRunner:
 
         return mean_loss, sem_loss
 
-    def run_trial(self, hidden_channels_power_of_two, representation_size, output_size, embedding_dimension, hidden_layers, dropout_probability, lr, batch_size):
+    def run_trial(
+        self,
+        hidden_channels_power_of_two,
+        representation_size,
+        output_size,
+        embedding_dimensions,
+        hidden_layers,
+        dropout_probability,
+        lr,
+        batch_size,
+    ):
         train_losses = []
         validation_losses = []
         test_losses = []
         kf = KFold(n_splits=self.k_folds)
 
+        hidden_channels = 2 ** hidden_channels_power_of_two
+
         self.logger.info(f"Running optimisation trial {self.trial_number}")
-        start_time = time.time()
-        for fold_number, (train_index, val_index) in enumerate(kf.split(range(len(self.train_dataset)))):
+        trial_id = self.experiment_db.create_trial(
+            experiment_id=self.experiment_id,
+            trial_number=self.trial_number,
+            learning_rate=lr,
+            batch_size=batch_size,
+            hidden_channels=hidden_channels,
+            dropout_probability=dropout_probability,
+            representation_size=representation_size,
+            hidden_layers=hidden_layers,
+            embedding_dimensions=embedding_dimensions,
+        )
+        trial_start_time = time.time()
+        for fold_index, (train_index, val_index) in enumerate(
+            kf.split(range(len(self.train_dataset)))
+        ):
+            fold_number = fold_index + 1
+            fold_start_time = time.time()
             train_subset = Subset(self.train_dataset, train_index)
             val_subset = Subset(self.train_dataset, val_index)
-            train_loader = DataLoader(
-                train_subset,
-                batch_size=batch_size
-            )
+            train_loader = DataLoader(train_subset, batch_size=batch_size)
 
             # Create a model for each set of cross-validation, with the given hyperparameters
             model = self.model_cls(
-                embedding_dimension,
-                2 ** hidden_channels_power_of_two,
+                embedding_dimensions,
+                hidden_channels,
                 hidden_layers,
                 representation_size,
                 output_size,
-                dropout_probability
+                dropout_probability,
             ).to(self.device)
 
             optimiser = self.optimiser_cls(model.parameters(), lr=lr)
@@ -128,14 +179,27 @@ class TrialRunner:
             test_loss = self.evaluate_model(model, self.test_dataset)
             test_losses.append(test_loss)
 
-            self.logger.info(f"Completed cross-validation fold {fold_number+1} after {epochs_completed} epochs")
+            fold_end_time = time.time()
+            self.logger.info(
+                f"Completed cross-validation fold {fold_number} after {epochs_completed} epochs"
+            )
+
+            self.experiment_db.create_fold(
+                trial_id=trial_id,
+                fold_number=fold_number,
+                duration_secs=fold_end_time-fold_start_time,
+                train_loss=train_loss,
+                val_loss=val_loss,
+                test_loss=test_loss,
+                epochs=epochs_completed
+            )
 
         train_loss, train_sem = self.compute_loss_statistics(train_losses)
         val_loss, val_sem = self.compute_loss_statistics(validation_losses)
         test_loss, test_sem = self.compute_loss_statistics(test_losses)
 
         end_time = time.time()
-        self.logger.info(f"Completed trial in {end_time - start_time}s")
+        self.logger.info(f"Completed trial in {end_time - trial_start_time}s")
         results = dict(
             trial_number=self.trial_number,
             hidden_layers=hidden_layers,
@@ -143,7 +207,7 @@ class TrialRunner:
             channels_power_of_two=hidden_channels_power_of_two,
             representation_size=representation_size,
             output_size=output_size,
-            embedding_dimension=embedding_dimension,
+            embedding_dimensions=embedding_dimensions,
             lr=lr,
             batch_size=batch_size,
             train_loss=train_loss,
@@ -151,7 +215,7 @@ class TrialRunner:
             val_loss=val_loss,
             val_sem=val_sem,
             test_loss=test_loss,
-            test_sem=test_sem
+            test_sem=test_sem,
         )
         self.results.append(results)
 
@@ -165,3 +229,122 @@ class TrialRunner:
     def run(self, params: dict):
         self.trial_number += 1
         return self.run_trial(**params)
+
+
+def run_experiment(
+    device,
+    experiment_db,
+    description,
+    num_trials,
+    model,
+    dataset_name,
+    training_ratio,
+    k_folds,
+    max_epochs,
+    metric_name,
+    optimiser_name,
+    optimisation_strategy,
+):
+
+    dataset_generators = dict(
+        lipo=lambda: MoleculeNet(root="data/Lipo", name="Lipo"),
+        esol=lambda: MoleculeNet(root="data/ESOL", name="ESOL"),
+    )
+
+    mse_loss = MSELoss()
+    metric_lookup = dict(
+        mse=mse_loss,
+        rmse=lambda y_hat, y: torch.sqrt(mse_loss(y_hat, y)),
+    )
+
+    optimiser_lookup = dict(adam=torch.optim.Adam)
+
+    optimisation_strategies = dict(
+        sobol=GenerationStrategy(
+            steps=[GenerationStep(model=Models.SOBOL, num_trials=num_trials)]
+        ),
+        sobol_gpei=GenerationStrategy(
+            steps=[
+                GenerationStep(model=Models.SOBOL, num_trials=0.25*num_trials),
+                GenerationStep(model=Models.GPEI, num_trials=0.75*num_trials)
+            ]
+        )
+    )
+
+    # Generate the train/test split
+    dataset = dataset_generators[dataset_name]()
+    dataset = dataset.shuffle()
+
+    train_split = round(training_ratio * len(dataset))
+    test_split = len(dataset) - train_split
+    train_dataset, test_dataset = random_split(
+        dataset, lengths=[train_split, test_split]
+    )
+
+    # Create an entry in the DB for the experiment
+    experiment_id = experiment_db.create_experiment(
+        description=description,
+        model=model.name,
+        dataset=dataset_name,
+        trials=num_trials,
+        training_split=training_ratio,
+        optimisation_strategy=optimisation_strategy,
+        max_epochs=max_epochs,
+        optimiser=optimiser_name,
+        metric=metric_name,
+    )
+
+    trial_runner = TrialRunner(
+        experiment_db=experiment_db,
+        experiment_id=experiment_id,
+        model_cls=model,
+        train_dataset=train_dataset,
+        test_dataset=test_dataset,
+        k_folds=k_folds,
+        max_epochs=max_epochs,
+        criterion=metric_lookup[metric_name],
+        optimiser_cls=optimiser_lookup[optimiser_name],
+        device=device,
+    )
+
+    parameters = [
+        dict(
+            name="lr",
+            bounds=[1e-6, 1e-2],
+            type="range",
+            log_scale=True,
+            value_type="float",
+        ),
+        dict(name="batch_size", bounds=[16, 256], value_type="int", type="range"),
+        dict(
+            name="hidden_channels_power_of_two",
+            bounds=[5, 8],
+            value_type="int",
+            type="range",
+        ),
+        dict(
+            name="dropout_probability",
+            bounds=[0.3, 0.9],
+            value_type="float",
+            type="range",
+        ),
+        dict(
+            name="representation_size", bounds=[32, 128], value_type="int", type="range"
+        ),
+        dict(name="hidden_layers", bounds=[0, 4], value_type="int", type="range"),
+        dict(name="output_size", value=1, value_type="int", type="fixed"),
+        dict(name="embedding_dimensions", value=100, value_type="int", type="fixed"),
+    ]
+
+    logger.info(f"Running experiment for {num_trials} trial")
+
+    best_parameters, values, experiment, model = optimize(
+        parameters=parameters,
+        evaluation_function=trial_runner.run,
+        minimize=True,
+        objective_name="validation_loss",
+        total_trials=num_trials,
+        generation_strategy=optimisation_strategies[optimisation_strategy],
+    )
+
+    logger.info(f"Best parameters", best_parameters)

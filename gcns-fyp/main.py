@@ -68,7 +68,7 @@ old_parameters = [
         dict(name="representation_size", values=[32, 64, 128], value_type="int", type="choice"),
         dict(name="hidden_layers", bounds=[0, 4], value_type="int", type="range"),
         dict(name="output_size", value=1, value_type="int", type="fixed"),
-        dict(name="embedding_dimension", value=100, value_type="int", type="fixed"),
+        dict(name="embedding_dimensions", value=100, value_type="int", type="fixed"),
 ]
 
 parameters = [
@@ -85,7 +85,7 @@ parameters = [
         dict(name="representation_size", bounds=[32, 128], value_type="int", type="range"),
         dict(name="hidden_layers", bounds=[0, 4], value_type="int", type="range"),
         dict(name="output_size", value=1, value_type="int", type="fixed"),
-        dict(name="embedding_dimension", value=100, value_type="int", type="fixed"),
+        dict(name="embedding_dimensions", value=100, value_type="int", type="fixed"),
 ]
 
 # Perform hyperparameter optimisation
